@@ -9,12 +9,48 @@ You can also include images in this folder and reference them in the markdown. E
 
 ## How it works
 
-Explain how your project works
+Tiny ML ALU is an 8-bit signed (INT8) ALU built around the operations that neural-network inference uses most. Besides normal add, subtract and logic, it has saturating add and subtract (results clamp to 127 or -128 instead of wrapping), ReLU, max, min, absolute difference, rounded average, and a packed dot product that treats each byte as two signed 4-bit numbers and computes `a_lo*b_lo + a_hi*b_hi`. That last one is the core step of a quantized matrix multiply.
+
+The ALU holds two operand registers, A and B. A 2-bit command on `uio[5:4]` loads either register from the data bus `ui_in`, or writes the current result back into A. Writeback lets you chain operations on chip. For example, you can repeatedly add B into A to accumulate, then apply ReLU, without reloading anything.
+
+The result is registered, so it appears on `uo_out` one clock after the operands or opcode change. Two flags are also registered: `zero` (result is 0) and `overflow` (signed overflow for ADD/SUB, or the result was clamped for the saturating ops).
+
+| Opcode | Name   | Result |
+|--------|--------|--------|
+| 0  | ADD    | A + B (wraps), overflow flag set on signed overflow |
+| 1  | SUB    | A - B (wraps), overflow flag set on signed overflow |
+| 2  | ADDS   | A + B, saturated to [-128, 127] |
+| 3  | SUBS   | A - B, saturated to [-128, 127] |
+| 4  | MAX    | max(A, B), signed |
+| 5  | MIN    | min(A, B), signed |
+| 6  | RELU   | max(A, 0) |
+| 7  | ABSD   | \|A - B\|, saturated to 127 |
+| 8  | AVG    | (A + B + 1) >> 1, signed, rounds up |
+| 9  | DOT4   | A[3:0]·B[3:0] + A[7:4]·B[7:4] as signed 4-bit lanes, saturated |
+| 10 | AND    | A & B |
+| 11 | OR     | A \| B |
+| 12 | XOR    | A ^ B |
+| 13 | POPCNT | number of 1 bits in A |
+| 14 | CLZ    | leading zeros in A (8 if A = 0) |
+| 15 | ROTL   | A rotated left by B[2:0] |
+
+| Command `uio[5:4]` | Action on the next clock edge |
+|---|---|
+| 00 | hold |
+| 01 | A <= ui_in |
+| 10 | B <= ui_in |
+| 11 | A <= result of the current opcode (writeback) |
 
 ## How to test
 
-Explain how to use your project
+1. Hold `rst_n` low for a few clocks, then release it.
+2. Put a value on `ui_in` and set `uio[5:4] = 01` for one clock to load A.
+3. Put a value on `ui_in` and set `uio[5:4] = 10` for one clock to load B.
+4. Set the opcode on `uio[3:0]` with `uio[5:4] = 00`. Wait one clock and read the result on `uo_out`, overflow on `uio[6]` and zero on `uio[7]`.
+5. To accumulate, keep the opcode set (for example 2, ADDS) and pulse `uio[5:4] = 11`. Each pulse replaces A with A + B.
+
+Example: load A = 3 (0x03) and B = 0x21 (lanes 1 and 2), then opcode 9 (DOT4) gives 3·1 + 0·2 = 3.
 
 ## External hardware
 
-List external hardware used in your project (e.g. PMOD, LED display, etc), if any
+None required. Switches on the inputs and LEDs on the outputs are enough to try it by hand.
