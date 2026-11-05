@@ -88,7 +88,7 @@ async def load(dut, command, value):
 
 async def run_op(dut, op):
     dut.uio_in.value = op
-    await ClockCycles(dut.clk, 2)
+    await ClockCycles(dut.clk, 3)
     uio = int(dut.uio_out.value)
     return int(dut.uo_out.value), (uio >> 6) & 1, (uio >> 7) & 1
 

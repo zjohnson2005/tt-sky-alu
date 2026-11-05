@@ -5,7 +5,8 @@
  * Tiny ML ALU: an 8-bit signed (INT8) ALU built around the operations
  * neural-network inference actually uses: saturating math, ReLU, max/min,
  * a packed 4-bit dot product, and a writeback path so results can be
- * accumulated without leaving the chip.
+ * accumulated without leaving the chip. All pins are registered on the
+ * way in so every timing path starts and ends at a flip-flop.
  */
 
 `default_nettype none
@@ -43,8 +44,21 @@ module tt_um_zjohnson2005_ml_alu (
     localparam CMD_LOAD_B    = 2'b10;
     localparam CMD_WRITEBACK = 2'b11;
 
-    wire [3:0] opcode  = uio_in[3:0];
-    wire [1:0] command = uio_in[5:4];
+    reg [7:0] data_in;
+    reg [3:0] opcode;
+    reg [1:0] command;
+
+    always @(posedge clk) begin
+        if (!rst_n) begin
+            data_in <= 8'd0;
+            opcode  <= 4'd0;
+            command <= CMD_HOLD;
+        end else begin
+            data_in <= ui_in;
+            opcode  <= uio_in[3:0];
+            command <= uio_in[5:4];
+        end
+    end
 
     reg signed [7:0] operand_a;
     reg signed [7:0] operand_b;
@@ -161,8 +175,8 @@ module tt_um_zjohnson2005_ml_alu (
             zero_flag     <= 1'b1;
         end else begin
             case (command)
-                CMD_LOAD_A:    operand_a <= ui_in;
-                CMD_LOAD_B:    operand_b <= ui_in;
+                CMD_LOAD_A:    operand_a <= data_in;
+                CMD_LOAD_B:    operand_b <= data_in;
                 CMD_WRITEBACK: operand_a <= next_result;
                 CMD_HOLD:      ;
             endcase

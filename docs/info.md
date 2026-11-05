@@ -13,7 +13,7 @@ Tiny ML ALU is an 8-bit signed (INT8) ALU built around the operations that neura
 
 The ALU holds two operand registers, A and B. A 2-bit command on `uio[5:4]` loads either register from the data bus `ui_in`, or writes the current result back into A. Writeback lets you chain operations on chip. For example, you can repeatedly add B into A to accumulate, then apply ReLU, without reloading anything.
 
-The result is registered, so it appears on `uo_out` one clock after the operands or opcode change. Two flags are also registered: `zero` (result is 0) and `overflow` (signed overflow for ADD/SUB, or the result was clamped for the saturating ops).
+All input pins are captured into registers on each clock edge before they are used, so every timing path starts and ends at a flip-flop. Commands take effect one clock after you present them, and the result is registered too, so it appears on `uo_out` two clocks after the operands or opcode change. Two flags are also registered: `zero` (result is 0) and `overflow` (signed overflow for ADD/SUB, or the result was clamped for the saturating ops).
 
 | Opcode | Name   | Result |
 |--------|--------|--------|
@@ -46,7 +46,7 @@ The result is registered, so it appears on `uo_out` one clock after the operands
 1. Hold `rst_n` low for a few clocks, then release it.
 2. Put a value on `ui_in` and set `uio[5:4] = 01` for one clock to load A.
 3. Put a value on `ui_in` and set `uio[5:4] = 10` for one clock to load B.
-4. Set the opcode on `uio[3:0]` with `uio[5:4] = 00`. Wait one clock and read the result on `uo_out`, overflow on `uio[6]` and zero on `uio[7]`.
+4. Set the opcode on `uio[3:0]` with `uio[5:4] = 00`. Wait two clocks and read the result on `uo_out`, overflow on `uio[6]` and zero on `uio[7]`.
 5. To accumulate, keep the opcode set (for example 2, ADDS) and pulse `uio[5:4] = 11`. Each pulse replaces A with A + B.
 
 Example: load A = 3 (0x03) and B = 0x21 (lanes 1 and 2), then opcode 9 (DOT4) gives 3·1 + 0·2 = 3.
