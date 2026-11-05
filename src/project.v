@@ -6,7 +6,8 @@
  * neural-network inference actually uses: saturating math, ReLU, max/min,
  * a packed 4-bit dot product, and a writeback path so results can be
  * accumulated without leaving the chip. All pins are registered on the
- * way in so every timing path starts and ends at a flip-flop.
+ * way in so every timing path starts and ends at a flip-flop, and a
+ * writeback happens once per command even if the command is held.
  */
 
 `default_nettype none
@@ -47,16 +48,19 @@ module tt_um_zjohnson2005_ml_alu (
     reg [7:0] data_in;
     reg [3:0] opcode;
     reg [1:0] command;
+    reg [1:0] previous_command;
 
     always @(posedge clk) begin
         if (!rst_n) begin
-            data_in <= 8'd0;
-            opcode  <= 4'd0;
-            command <= CMD_HOLD;
+            data_in          <= 8'd0;
+            opcode           <= 4'd0;
+            command          <= CMD_HOLD;
+            previous_command <= CMD_HOLD;
         end else begin
-            data_in <= ui_in;
-            opcode  <= uio_in[3:0];
-            command <= uio_in[5:4];
+            data_in          <= ui_in;
+            opcode           <= uio_in[3:0];
+            command          <= uio_in[5:4];
+            previous_command <= command;
         end
     end
 
@@ -122,6 +126,8 @@ module tt_um_zjohnson2005_ml_alu (
     wire [2:0]  rotate_amount = operand_b[2:0];
     wire [15:0] doubled_a     = {operand_a, operand_a} << rotate_amount;
 
+    wire writeback_now = (command == CMD_WRITEBACK) && (previous_command != CMD_WRITEBACK);
+
     reg [7:0] next_result;
     reg       next_overflow;
 
@@ -177,7 +183,7 @@ module tt_um_zjohnson2005_ml_alu (
             case (command)
                 CMD_LOAD_A:    operand_a <= data_in;
                 CMD_LOAD_B:    operand_b <= data_in;
-                CMD_WRITEBACK: operand_a <= next_result;
+                CMD_WRITEBACK: if (writeback_now) operand_a <= next_result;
                 CMD_HOLD:      ;
             endcase
 

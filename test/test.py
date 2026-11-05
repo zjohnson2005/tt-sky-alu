@@ -140,3 +140,26 @@ async def test_relu_dot_accumulate(dut):
     await load(dut, LOAD_A, 0x80)  # -128
     result, _, zero = await run_op(dut, 6)  # RELU
     assert result == 0 and zero == 1
+
+
+@cocotb.test()
+async def test_writeback_fires_once_when_held(dut):
+    """Holding the writeback command for many clocks adds B into A only once."""
+    await reset(dut)
+    await load(dut, LOAD_A, 5)
+    await load(dut, LOAD_B, 3)
+    dut.uio_in.value = 2  # ADDS
+    await ClockCycles(dut.clk, 2)
+    dut.uio_in.value = (WRITEBACK << 4) | 2
+    await ClockCycles(dut.clk, 25)
+    dut.uio_in.value = 10  # AND, so the result shows A directly when B is all ones
+    await load(dut, LOAD_B, 0xFF)
+    result, _, _ = await run_op(dut, 10)
+    assert result == 8, f"A should be 5 + 3 = 8 after one writeback, got {result}"
+
+    dut.uio_in.value = (WRITEBACK << 4) | 2
+    await ClockCycles(dut.clk, 3)
+    dut.uio_in.value = 2
+    await ClockCycles(dut.clk, 2)
+    result, _, _ = await run_op(dut, 10)
+    assert result == 7, f"second writeback should give A = 8 + (-1) = 7, got {result}"
